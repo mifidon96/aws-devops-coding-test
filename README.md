@@ -106,3 +106,20 @@ app/            Node.js WebAPI handler
   deploy-api.yml       app build + deploy + smoke test
   terraform-checks.yml fmt + validate on every PR
 ```
+## Deployment verification
+
+The stack was applied end-to-end in a sandbox account: all 44 resources created
+cleanly, `/health` and `/health/db` returned 200 — proving the full path through
+API Gateway, the VPC-attached Lambda, the security group pair, the Secrets
+Manager VPC endpoint and RDS — and the environment was destroyed the same
+session.
+
+The deploy workflow's OIDC role assumption failed in that account with
+`Not authorized to perform sts:AssumeRoleWithWebIdentity`. The role trust policy
+and the OIDC provider's audience configuration were both verified correct via
+`aws iam get-role` and `aws iam get-open-id-connect-provider`. The sandbox is a
+managed account, and a persistent failure despite correct configuration is
+consistent with an organisation-level control on external identity federation,
+which is not inspectable from a member account. The Terraform static-checks
+workflow runs green; the deploy workflow is expected to succeed in an
+unrestricted account.
