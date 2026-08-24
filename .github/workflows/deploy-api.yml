@@ -1,0 +1,87 @@
+name: Deploy API
+
+# Requirement 1e: the pipeline that accepts future code changes to the API.
+#
+# Flow: npm ci -> zip -> assume AWS role via OIDC (no stored keys) ->
+# upload versioned artefact to S3 -> update the Lambda -> smoke test.
+#
+# Terraform ignores code changes on the function (lifecycle ignore_changes),
+# so this pipeline and `terraform apply` never revert each other's work.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required to request the OIDC token
+
+env:
+  AWS_REGION: eu-west-2
+  NODE_VERSION: '20'
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install production dependencies
+        working-directory: app
+        run: npm ci --omit=dev
+
+      - name: Syntax check
+        working-directory: app
+        run: node --check index.js
+
+      - name: Package
+        working-directory: app
+        run: zip -rq ../function.zip .
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-deploy-${{ github.run_id }}
+
+      - name: Upload artefact to S3
+        id: upload
+        run: |
+          KEY="lambda/${{ github.sha }}.zip"
+          aws s3 cp function.zip "s3://${{ vars.ARTEFACT_BUCKET }}/${KEY}"
+          echo "key=${KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Update function code
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --s3-bucket "${{ vars.ARTEFACT_BUCKET }}" \
+            --s3-key "${{ steps.upload.outputs.key }}"
+
+          aws lambda wait function-updated \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}"
+
+      - name: Smoke test
+        if: vars.API_ENDPOINT != ''
+        run: |
+          for i in 1 2 3 4 5; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "${{ vars.API_ENDPOINT }}/health" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Attempt ${i}: HTTP ${CODE}, retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 5 attempts"
+          exit 1

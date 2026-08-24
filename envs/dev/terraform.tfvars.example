@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and fill in before planning.
+# terraform.tfvars is gitignored - it never gets committed.
+
+project     = "nodeapi"
+environment = "dev"
+aws_region  = "eu-west-2"
+vpc_cidr    = "10.20.0.0/16"
+
+# REQUIRED - your GitHub username, exactly as it appears in your repo URL.
+github_org  = "YOUR-GITHUB-USERNAME"
+github_repo = "aws-devops-coding-test"
+
+# Run: aws iam list-open-id-connect-providers
+# If token.actions.githubusercontent.com already appears, set this to false.
+create_oidc_provider = true

@@ -1,0 +1,15 @@
+{
+  "name": "node-webapi",
+  "version": "1.0.0",
+  "description": "Node.js WebAPI deployed to AWS Lambda behind API Gateway",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "node --check index.js"
+  },
+  "dependencies": {
+    "mssql": "^11.0.1"
+  }
+}

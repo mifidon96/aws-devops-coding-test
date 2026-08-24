@@ -1,0 +1,40 @@
+name: Terraform checks
+
+# Static checks only - no AWS credentials needed, so this runs safely on any
+# branch or pull request. Formatting and validity are enforced before merge.
+
+on:
+  pull_request:
+    paths:
+      - 'modules/**'
+      - 'envs/**'
+  push:
+    branches: [main]
+    paths:
+      - 'modules/**'
+      - 'envs/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: fmt and validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Init (offline)
+        working-directory: envs/dev
+        run: terraform init -backend=false
+
+      - name: Validate
+        working-directory: envs/dev
+        run: terraform validate
